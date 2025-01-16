@@ -7,15 +7,13 @@ import os
 
 # Function to list all database files in the current directory
 def list_databases():
-    if not os.path.exists('data'):
-        os.makedirs('data')
-    return [db for db in os.listdir('data') if db.endswith(".db")]
+    return [db for db in os.listdir() if db.endswith(".db")]
 
 # Initialize the Database
 def init_db(db_name):
-    db_path = os.path.join('data', db_name)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
+    # Check if the table exists before creating
     cursor.execute(
         '''CREATE TABLE IF NOT EXISTS work_entries (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,8 +31,7 @@ def init_db(db_name):
 # Add Entry to Database
 def add_entry(db_name, client_name, client_location, work_of_visit, requirements, note, hours_worked):
     date = datetime.now().strftime("%Y-%m-%d")
-    db_path = os.path.join('data', db_name)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute('''INSERT INTO work_entries (date, client_name, client_location, work_of_visit, 
                       requirements, note, hours_worked) VALUES (?, ?, ?, ?, ?, ?, ?)''',
@@ -44,30 +41,27 @@ def add_entry(db_name, client_name, client_location, work_of_visit, requirements
 
 # Load Data from Database
 def load_data(db_name):
-    db_path = os.path.join('data', db_name)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_name)
     df = pd.read_sql_query("SELECT * FROM work_entries", conn)
     conn.close()
     return df
 
 # Clear Data from Database
 def clear_data(db_name):
-    db_path = os.path.join('data', db_name)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM work_entries")
     conn.commit()
     conn.close()
 
 # Export Data to Excel
-@st.cache_data
 def export_data(df):
     output = BytesIO()
     df.to_excel(output, index=False, engine="xlsxwriter")
     processed_data = output.getvalue()
     return processed_data
 
-# Page Configuration
+# Streamlit App Customization
 st.set_page_config(
     page_title="Work Tracker Tool",
     page_icon="🛠️",
@@ -75,21 +69,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state
-if 'databases' not in st.session_state:
-    st.session_state.databases = list_databases()
-
-# Sidebar
+# Sidebar: Select or create a database
 st.sidebar.title("📁 Database Manager")
-selected_db = st.sidebar.selectbox("Select Database", st.session_state.databases)
+databases = list_databases()
+selected_db = st.sidebar.selectbox("Select Database", databases)
 
 if st.sidebar.button("Create New Database"):
     new_db_name = f"work_tracker_{datetime.now().strftime('%B_%Y')}.db"
-    if new_db_name not in st.session_state.databases:
+    if new_db_name not in databases:
         init_db(new_db_name)
-        st.session_state.databases = list_databases()
         st.sidebar.success(f"🎉 New database '{new_db_name}' created!")
-        st.rerun()  # Changed from experimental_rerun() to rerun()
+        st.experimental_rerun()  # Refresh the app state
     else:
         st.sidebar.warning("⚠️ Database already exists!")
 
@@ -98,32 +88,28 @@ if st.sidebar.button("Clear Current Database"):
         clear_data(selected_db)
         st.sidebar.success("✅ Current database cleared!")
 
-# Main Content
+# Ensure a database is selected
 if not selected_db:
     st.warning("⚠️ Please select or create a database from the sidebar.")
 else:
+    # Initialize the selected database
     init_db(selected_db)
     st.sidebar.markdown(f"**Current Database:** `{selected_db}`")
 
-    # Title Section
+    # Add App Logo and Title
+    st.image("https://via.placeholder.com/728x90.png?text=Work+Tracker+Tool", use_column_width=True)
     st.title("🌟 Work Tracker Tool")
-    st.markdown("Keep track of your tasks and activities with an intuitive interface!")
+    st.markdown("Keep track of your tasks and activities with an intuitive and visually appealing interface!")
 
     # Add Entry Form
-    with st.form("entry_form", clear_on_submit=True):
+    with st.form("entry_form"):
         st.markdown("### 📝 Add New Entry")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            client_name = st.text_input("👤 Client Name", placeholder="Enter the client name")
-            work_of_visit = st.text_input("🔧 Work of Visit", placeholder="Describe the purpose of the visit")
-            requirements = st.text_area("📋 Requirements", placeholder="Enter client requirements")
-        
-        with col2:
-            client_location = st.text_input("📍 Client Location", placeholder="Enter the client's location")
-            hours_worked = st.number_input("⏱️ Hours of Working", min_value=0.0, step=0.5)
-            note = st.text_area("📝 Note", placeholder="Add any additional notes")
-        
+        client_name = st.text_input("👤 Client Name", placeholder="Enter the client name")
+        client_location = st.text_input("📍 Client Location", placeholder="Enter the client's location")
+        work_of_visit = st.text_input("🔧 Work of Visit", placeholder="Describe the purpose of the visit")
+        requirements = st.text_area("📋 Requirements", placeholder="Enter client requirements")
+        note = st.text_area("📝 Note", placeholder="Add any additional notes")
+        hours_worked = st.number_input("⏱️ Hours of Working", min_value=0.0, step=0.5)
         submitted = st.form_submit_button("Submit ✅")
 
         if submitted:
@@ -133,12 +119,13 @@ else:
             else:
                 st.error("⚠️ All fields are required!")
 
-    # Display Data Section
+    # Display Stored Data
     st.markdown("### 📊 View Work Entries")
     data = load_data(selected_db)
     if not data.empty:
-        st.dataframe(data.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
+        st.dataframe(data, use_container_width=True)
 
+        # Export Data Button
         excel_data = export_data(data)
         st.download_button(
             label="📥 Export Data to Excel",
@@ -149,9 +136,9 @@ else:
     else:
         st.info("ℹ️ No entries found. Add some tasks to get started!")
 
+    # Footer
     st.markdown(
         '<div style="text-align: center; padding: 10px; margin-top: 20px; color: white; background-color: #007acc;">'
         '<h4>💼 Created by Tejas Gavale</h4>'
-        '</div>', 
-        unsafe_allow_html=True
+        '</div>', unsafe_allow_html=True
     )
