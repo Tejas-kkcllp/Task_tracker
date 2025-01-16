@@ -89,7 +89,7 @@ if st.sidebar.button("Create New Database"):
         init_db(new_db_name)
         st.session_state.databases = list_databases()
         st.sidebar.success(f"🎉 New database '{new_db_name}' created!")
-        st.experimental_rerun()
+        st.rerun()  # Changed from experimental_rerun() to rerun()
     else:
         st.sidebar.warning("⚠️ Database already exists!")
 
